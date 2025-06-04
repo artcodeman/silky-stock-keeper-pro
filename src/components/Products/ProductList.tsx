@@ -1,11 +1,12 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Edit, Trash2, Plus } from 'lucide-react';
+import { Edit, Trash2, Plus, Eye } from 'lucide-react';
+import ProductDetail from './ProductDetail';
 
 interface Product {
   id: string;
@@ -13,6 +14,10 @@ interface Product {
   sku: string;
   unit_price: number;
   cost_price: number;
+  description?: string;
+  barcode?: string;
+  image_url?: string;
+  created_at: string;
   categories?: { name: string };
   suppliers?: { name: string };
 }
@@ -24,6 +29,9 @@ interface ProductListProps {
 }
 
 const ProductList = ({ onAdd, onEdit, onDelete }: ProductListProps) => {
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
   const { data: products, isLoading } = useQuery({
     queryKey: ['products'],
     queryFn: async () => {
@@ -35,6 +43,10 @@ const ProductList = ({ onAdd, onEdit, onDelete }: ProductListProps) => {
           sku,
           unit_price,
           cost_price,
+          description,
+          barcode,
+          image_url,
+          created_at,
           categories (name),
           suppliers (name)
         `)
@@ -44,6 +56,15 @@ const ProductList = ({ onAdd, onEdit, onDelete }: ProductListProps) => {
       return data as Product[];
     }
   });
+
+  const handleViewDetail = (product: Product) => {
+    setSelectedProduct(product);
+    setDetailOpen(true);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailOpen(false);
+  };
 
   if (isLoading) {
     return <div className="text-center py-8">加载中...</div>;
@@ -85,6 +106,13 @@ const ProductList = ({ onAdd, onEdit, onDelete }: ProductListProps) => {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => handleViewDetail(product)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => onEdit(product)}
                     >
                       <Edit className="h-4 w-4" />
@@ -103,6 +131,13 @@ const ProductList = ({ onAdd, onEdit, onDelete }: ProductListProps) => {
           </TableBody>
         </Table>
       </CardContent>
+
+      {/* 商品详情对话框 */}
+      <ProductDetail 
+        product={selectedProduct} 
+        open={detailOpen} 
+        onClose={handleCloseDetail} 
+      />
     </Card>
   );
 };
