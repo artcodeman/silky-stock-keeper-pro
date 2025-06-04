@@ -11,6 +11,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Upload, ImageIcon } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 
 const productSchema = z.object({
   name: z.string().min(1, '商品名称不能为空'),
@@ -21,6 +23,7 @@ const productSchema = z.object({
   unit_price: z.number().min(0, '售价不能为负'),
   cost_price: z.number().min(0, '成本价不能为负'),
   barcode: z.string().optional(),
+  image_url: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -34,6 +37,9 @@ interface ProductFormProps {
 const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(product?.image_url || null);
+  const [uploading, setUploading] = useState(false);
   
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
@@ -46,6 +52,7 @@ const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
       unit_price: product?.unit_price || 0,
       cost_price: product?.cost_price || 0,
       barcode: product?.barcode || '',
+      image_url: product?.image_url || '',
     },
   });
 
@@ -73,8 +80,71 @@ const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
     }
   });
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) { // 5MB
+      toast({
+        title: '图片过大',
+        description: '请选择小于 5MB 的图片',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: '文件格式不支持',
+        description: '请选择图片文件',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setImageFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setImagePreview(objectUrl);
+  };
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageFile) return form.getValues('image_url') || null;
+    
+    setUploading(true);
+    
+    try {
+      const fileExt = imageFile.name.split('.').pop();
+      const fileName = `${uuidv4()}.${fileExt}`;
+      const filePath = `${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, imageFile);
+        
+      if (uploadError) throw uploadError;
+      
+      const { data } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+        
+      return data.publicUrl;
+    } catch (error: any) {
+      toast({
+        title: '图片上传失败',
+        description: error.message,
+        variant: 'destructive'
+      });
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
+      // 先上传图片，获取URL
+      const imageUrl = await uploadImage();
+      
       const productData = {
         name: data.name,
         sku: data.sku,
@@ -84,6 +154,7 @@ const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
         unit_price: data.unit_price,
         cost_price: data.cost_price,
         barcode: data.barcode || null,
+        image_url: imageUrl,
       };
 
       if (product?.id) {
@@ -127,159 +198,212 @@ const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>商品名称 *</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="sku"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>SKU *</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>商品描述</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="category_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>商品分类</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>商品名称 *</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="选择分类" />
-                        </SelectTrigger>
+                        <Input {...field} />
                       </FormControl>
-                      <SelectContent>
-                        {categories?.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="supplier_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>供应商</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="sku"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>SKU *</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="选择供应商" />
-                        </SelectTrigger>
+                        <Input {...field} />
                       </FormControl>
-                      <SelectContent>
-                        {suppliers?.map((supplier) => (
-                          <SelectItem key={supplier.id} value={supplier.id}>
-                            {supplier.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="unit_price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>售价 *</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.01"
-                        {...field} 
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>商品描述</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="cost_price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>成本价 *</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.01"
-                        {...field} 
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="unit_price"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>售价 *</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            {...field} 
+                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-            <FormField
-              control={form.control}
-              name="barcode"
-              render={({ field }) => (
+                  <FormField
+                    control={form.control}
+                    name="cost_price"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>成本价 *</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            {...field} 
+                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
                 <FormItem>
-                  <FormLabel>条形码</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
+                  <FormLabel>商品图片</FormLabel>
+                  <div className="mt-2">
+                    <div className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md p-6 mb-4 relative">
+                      {imagePreview ? (
+                        <div className="relative w-full">
+                          <img 
+                            src={imagePreview} 
+                            alt="商品图片预览" 
+                            className="mx-auto max-h-40 object-contain"
+                          />
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="sm"
+                            className="absolute top-0 right-0" 
+                            onClick={() => {
+                              setImagePreview(null);
+                              setImageFile(null);
+                              form.setValue('image_url', '');
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
+                          <p className="mt-1 text-sm text-gray-500">
+                            点击或拖拽图片上传
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            PNG, JPG, GIF 文件 (最大 5MB)
+                          </p>
+                        </div>
+                      )}
+                      <input
+                        id="file-upload"
+                        name="file-upload"
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={handleImageChange}
+                      />
+                    </div>
+                  </div>
                 </FormItem>
-              )}
-            />
+
+                <FormField
+                  control={form.control}
+                  name="category_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>商品分类</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择分类" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {categories?.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="supplier_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>供应商</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择供应商" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {suppliers?.map((supplier) => (
+                            <SelectItem key={supplier.id} value={supplier.id}>
+                              {supplier.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="barcode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>条形码</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             <div className="flex gap-2">
-              <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? '提交中...' : (product?.id ? '更新' : '创建')}
+              <Button 
+                type="submit" 
+                disabled={mutation.isPending || uploading}
+              >
+                {(mutation.isPending || uploading) ? '提交中...' : (product?.id ? '更新' : '创建')}
               </Button>
               <Button type="button" variant="outline" onClick={onCancel}>
                 取消
