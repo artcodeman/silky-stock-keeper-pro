@@ -11,9 +11,11 @@ import {
   LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Navigation = () => {
   const location = useLocation();
+  const { signOut, user } = useAuth();
 
   const navItems = [
     { path: '/', label: '首页', icon: Home },
@@ -23,6 +25,14 @@ const Navigation = () => {
     { path: '/sales', label: '销售管理', icon: TrendingUp },
     { path: '/suppliers', label: '供应商', icon: Users },
   ];
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('退出失败:', error);
+    }
+  };
 
   return (
     <nav className="bg-white shadow-lg border-b">
@@ -48,10 +58,17 @@ const Navigation = () => {
               })}
             </div>
           </div>
-          <Button variant="outline" className="flex items-center space-x-2">
-            <LogOut className="h-4 w-4" />
-            <span>退出</span>
-          </Button>
+          <div className="flex items-center space-x-4">
+            {user && (
+              <span className="text-sm text-gray-600">
+                欢迎，{user.email}
+              </span>
+            )}
+            <Button variant="outline" className="flex items-center space-x-2" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4" />
+              <span>退出</span>
+            </Button>
+          </div>
         </div>
       </div>
     </nav>
