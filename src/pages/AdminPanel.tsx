@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { users, Edit, Trash2, UserCog } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Users, Edit, Trash2 } from 'lucide-react';
 import MainLayout from '@/components/Layout/MainLayout';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
@@ -56,15 +56,27 @@ const AdminPanel = () => {
           id,
           full_name,
           email,
-          created_at,
-          user_roles (
-            id,
-            role
-          )
+          created_at
         `);
       
       if (error) throw error;
-      return data as UserProfile[];
+
+      // 单独获取用户角色
+      const userIds = data.map(user => user.id);
+      const { data: rolesData, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('id, user_id, role')
+        .in('user_id', userIds);
+
+      if (rolesError) throw rolesError;
+
+      // 合并数据
+      const usersWithRoles = data.map(user => ({
+        ...user,
+        user_roles: rolesData?.filter(role => role.user_id === user.id) || []
+      }));
+
+      return usersWithRoles as UserProfile[];
     }
   });
 
@@ -72,7 +84,7 @@ const AdminPanel = () => {
   const updateUserMutation = useMutation({
     mutationFn: async ({ userId, userData }: { userId: string; userData: Partial<EditUserForm> }) => {
       // 更新用户基本信息
-      if (userData.full_name || userData.email) {
+      if (userData.full_name !== undefined || userData.email !== undefined) {
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -97,7 +109,7 @@ const AdminPanel = () => {
         // 添加新角色
         const { error: insertError } = await supabase
           .from('user_roles')
-          .insert([{ user_id: userId, role: userData.role }]);
+          .insert({ user_id: userId, role: userData.role });
         
         if (insertError) throw insertError;
       }
@@ -218,7 +230,7 @@ const AdminPanel = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <users className="h-5 w-5" />
+              <Users className="h-5 w-5" />
               用户管理
             </CardTitle>
           </CardHeader>

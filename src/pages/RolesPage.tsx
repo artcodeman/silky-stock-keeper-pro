@@ -38,15 +38,27 @@ const RolesPage = () => {
           id,
           user_id,
           role,
-          created_at,
-          profiles (
-            full_name,
-            email
-          )
+          created_at
         `);
       
       if (error) throw error;
-      return data as UserRole[];
+
+      // 单独获取用户资料
+      const userIds = data.map(role => role.user_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // 合并数据
+      const rolesWithProfiles = data.map(role => ({
+        ...role,
+        profiles: profilesData?.find(profile => profile.id === role.user_id) || null
+      }));
+
+      return rolesWithProfiles as UserRole[];
     }
   });
 
@@ -73,7 +85,7 @@ const RolesPage = () => {
     mutationFn: async ({ userId, role }: { userId: string; role: 'admin' | 'purchaser' | 'manager' }) => {
       const { error } = await supabase
         .from('user_roles')
-        .insert([{ user_id: userId, role }]);
+        .insert({ user_id: userId, role });
       
       if (error) throw error;
     },

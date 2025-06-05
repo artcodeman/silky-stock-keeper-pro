@@ -10,7 +10,7 @@ import {
   Home,
   LogOut,
   UserCog,
-  settings
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -53,7 +53,7 @@ const Navigation = () => {
 
   // 只有管理者可以看到管理面板
   if (userRole === 'manager') {
-    navItems.push({ path: '/admin', label: '管理面板', icon: settings });
+    navItems.push({ path: '/admin', label: '管理面板', icon: Settings });
   }
 
   const handleSignOut = async () => {
