@@ -3,22 +3,32 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import MainLayout from '@/components/Layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { UserPlus, Trash2 } from 'lucide-react';
+import MainLayout from '@/components/Layout/MainLayout';
+
+interface UserRole {
+  id: string;
+  user_id: string;
+  role: 'admin' | 'purchaser';
+  created_at: string;
+  profiles: {
+    full_name: string | null;
+    email: string | null;
+  } | null;
+}
 
 const RolesPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedUser, setSelectedUser] = useState<string>('');
-  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'purchaser'>('purchaser');
 
-  // 获取所有用户的角色信息
+  // 获取所有用户角色
   const { data: userRoles, isLoading } = useQuery({
     queryKey: ['user-roles'],
     queryFn: async () => {
@@ -29,114 +39,111 @@ const RolesPage = () => {
           user_id,
           role,
           created_at,
-          profiles!inner(email, full_name)
+          profiles!inner (
+            full_name,
+            email
+          )
         `);
+      
       if (error) throw error;
-      return data;
+      return data as UserRole[];
     }
   });
 
-  // 获取所有用户（用于分配角色）
+  // 获取所有用户（没有角色的）
   const { data: allUsers } = useQuery({
     queryKey: ['all-users'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name');
+        .select('id, full_name, email');
+      
       if (error) throw error;
       return data;
     }
   });
 
-  // 分配角色的 mutation
-  const assignRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
+  // 获取没有角色的用户
+  const usersWithoutRoles = allUsers?.filter(user => 
+    !userRoles?.some(role => role.user_id === user.id)
+  ) || [];
+
+  // 添加角色
+  const addRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: 'admin' | 'purchaser' }) => {
       const { error } = await supabase
         .from('user_roles')
-        .upsert({
-          user_id: userId,
-          role: role as 'admin' | 'purchaser'
-        });
+        .insert([{ user_id: userId, role }]);
+      
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-roles'] });
+      queryClient.invalidateQueries({ queryKey: ['all-users'] });
+      setSelectedUserId('');
+      setSelectedRole('purchaser');
       toast({
-        title: '角色分配成功',
+        title: '角色添加成功',
       });
-      setSelectedUser('');
-      setSelectedRole('');
     },
     onError: (error: any) => {
       toast({
-        title: '角色分配失败',
+        title: '添加角色失败',
         description: error.message,
         variant: 'destructive',
       });
     }
   });
 
-  // 删除角色的 mutation
-  const removeRoleMutation = useMutation({
+  // 删除角色
+  const deleteRoleMutation = useMutation({
     mutationFn: async (roleId: string) => {
       const { error } = await supabase
         .from('user_roles')
         .delete()
         .eq('id', roleId);
+      
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-roles'] });
+      queryClient.invalidateQueries({ queryKey: ['all-users'] });
       toast({
         title: '角色删除成功',
       });
     },
     onError: (error: any) => {
       toast({
-        title: '角色删除失败',
+        title: '删除角色失败',
         description: error.message,
         variant: 'destructive',
       });
     }
   });
 
-  const handleAssignRole = () => {
-    if (!selectedUser || !selectedRole) {
+  const handleAddRole = () => {
+    if (!selectedUserId) {
       toast({
-        title: '请选择用户和角色',
+        title: '请选择用户',
         variant: 'destructive',
       });
       return;
     }
-    assignRoleMutation.mutate({ userId: selectedUser, role: selectedRole });
+    addRoleMutation.mutate({ userId: selectedUserId, role: selectedRole });
   };
 
-  const handleRemoveRole = (roleId: string) => {
+  const handleDeleteRole = (roleId: string) => {
     if (confirm('确定要删除此角色吗？')) {
-      removeRoleMutation.mutate(roleId);
+      deleteRoleMutation.mutate(roleId);
     }
   };
 
   const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'destructive';
-      case 'purchaser':
-        return 'secondary';
-      default:
-        return 'outline';
-    }
+    return role === 'admin' ? 'default' : 'secondary';
   };
 
-  const getRoleDisplayName = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return '管理员';
-      case 'purchaser':
-        return '采购员';
-      default:
-        return role;
-    }
+  const getRoleText = (role: string) => {
+    return role === 'admin' ? '管理员' : '采购员';
   };
 
   if (isLoading) {
@@ -150,23 +157,29 @@ const RolesPage = () => {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">用户角色管理</h1>
-        
-        {/* 分配角色表单 */}
+        <div>
+          <h1 className="text-3xl font-bold">角色管理</h1>
+          <p className="text-muted-foreground">管理用户角色和权限</p>
+        </div>
+
+        {/* 添加角色 */}
         <Card>
           <CardHeader>
-            <CardTitle>分配用户角色</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              添加用户角色
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="user-select">选择用户</Label>
-                <Select value={selectedUser} onValueChange={setSelectedUser}>
-                  <SelectTrigger id="user-select">
+            <div className="flex gap-4 items-end">
+              <div className="flex-1">
+                <label className="text-sm font-medium">选择用户</label>
+                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                  <SelectTrigger>
                     <SelectValue placeholder="选择用户" />
                   </SelectTrigger>
                   <SelectContent>
-                    {allUsers?.map((user) => (
+                    {usersWithoutRoles.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.full_name || user.email}
                       </SelectItem>
@@ -174,12 +187,11 @@ const RolesPage = () => {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div>
-                <Label htmlFor="role-select">选择角色</Label>
-                <Select value={selectedRole} onValueChange={setSelectedRole}>
-                  <SelectTrigger id="role-select">
-                    <SelectValue placeholder="选择角色" />
+              <div className="flex-1">
+                <label className="text-sm font-medium">选择角色</label>
+                <Select value={selectedRole} onValueChange={(value: 'admin' | 'purchaser') => setSelectedRole(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">管理员</SelectItem>
@@ -187,16 +199,12 @@ const RolesPage = () => {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="flex items-end">
-                <Button 
-                  onClick={handleAssignRole}
-                  disabled={assignRoleMutation.isPending}
-                  className="w-full"
-                >
-                  {assignRoleMutation.isPending ? '分配中...' : '分配角色'}
-                </Button>
-              </div>
+              <Button 
+                onClick={handleAddRole}
+                disabled={addRoleMutation.isPending || !selectedUserId}
+              >
+                {addRoleMutation.isPending ? '添加中...' : '添加角色'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -204,7 +212,7 @@ const RolesPage = () => {
         {/* 用户角色列表 */}
         <Card>
           <CardHeader>
-            <CardTitle>当前用户角色</CardTitle>
+            <CardTitle>用户角色列表</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -213,33 +221,35 @@ const RolesPage = () => {
                   <TableHead>用户</TableHead>
                   <TableHead>邮箱</TableHead>
                   <TableHead>角色</TableHead>
-                  <TableHead>分配时间</TableHead>
+                  <TableHead>添加时间</TableHead>
                   <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {userRoles?.map((userRole) => (
                   <TableRow key={userRole.id}>
-                    <TableCell>
-                      {userRole.profiles?.full_name || '未知用户'}
+                    <TableCell className="font-medium">
+                      {userRole.profiles?.full_name || '未设置'}
                     </TableCell>
-                    <TableCell>{userRole.profiles?.email}</TableCell>
+                    <TableCell>
+                      {userRole.profiles?.email || '未设置'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={getRoleBadgeVariant(userRole.role)}>
-                        {getRoleDisplayName(userRole.role)}
+                        {getRoleText(userRole.role)}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {new Date(userRole.created_at).toLocaleDateString()}
+                      {new Date(userRole.created_at).toLocaleDateString('zh-CN')}
                     </TableCell>
                     <TableCell>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleRemoveRole(userRole.id)}
-                        disabled={removeRoleMutation.isPending}
+                        onClick={() => handleDeleteRole(userRole.id)}
+                        disabled={deleteRoleMutation.isPending}
                       >
-                        删除
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
