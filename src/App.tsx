@@ -12,6 +12,7 @@ import InventoryPage from "./pages/InventoryPage";
 import PurchasePage from "./pages/PurchasePage";
 import SalesPage from "./pages/SalesPage";
 import SuppliersPage from "./pages/SuppliersPage";
+import RolesPage from "./pages/RolesPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 
@@ -54,6 +55,11 @@ const App = () => (
             <Route path="/suppliers" element={
               <ProtectedRoute>
                 <SuppliersPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/roles" element={
+              <ProtectedRoute>
+                <RolesPage />
               </ProtectedRoute>
             } />
             <Route path="*" element={<NotFound />} />

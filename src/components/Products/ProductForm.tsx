@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,6 +5,7 @@ import * as z from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -36,6 +36,7 @@ interface ProductFormProps {
 
 const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(product?.image_url || null);
@@ -142,6 +143,8 @@ const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
+      if (!user) throw new Error('用户未登录');
+      
       // 先上传图片，获取URL
       const imageUrl = await uploadImage();
       
@@ -155,6 +158,7 @@ const ProductForm = ({ product, onSuccess, onCancel }: ProductFormProps) => {
         cost_price: data.cost_price,
         barcode: data.barcode || null,
         image_url: imageUrl,
+        created_by: user.id, // 设置创建者为当前用户
       };
 
       if (product?.id) {

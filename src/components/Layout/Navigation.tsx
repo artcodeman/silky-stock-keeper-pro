@@ -8,14 +8,33 @@ import {
   Users, 
   BarChart3,
   Home,
-  LogOut
+  LogOut,
+  UserCog
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const Navigation = () => {
   const location = useLocation();
   const { signOut, user } = useAuth();
+
+  // 获取当前用户的角色
+  const { data: userRole } = useQuery({
+    queryKey: ['user-role', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .single();
+      if (error) return null;
+      return data.role;
+    },
+    enabled: !!user?.id
+  });
 
   const navItems = [
     { path: '/', label: '首页', icon: Home },
@@ -25,6 +44,11 @@ const Navigation = () => {
     { path: '/sales', label: '销售管理', icon: TrendingUp },
     { path: '/suppliers', label: '供应商', icon: Users },
   ];
+
+  // 只有管理员才能看到角色管理
+  if (userRole === 'admin') {
+    navItems.push({ path: '/roles', label: '角色管理', icon: UserCog });
+  }
 
   const handleSignOut = async () => {
     try {
@@ -60,9 +84,16 @@ const Navigation = () => {
           </div>
           <div className="flex items-center space-x-4">
             {user && (
-              <span className="text-sm text-gray-600">
-                欢迎，{user.email}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">
+                  欢迎，{user.email}
+                </span>
+                {userRole && (
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    {userRole === 'admin' ? '管理员' : '采购员'}
+                  </span>
+                )}
+              </div>
             )}
             <Button variant="outline" className="flex items-center space-x-2" onClick={handleSignOut}>
               <LogOut className="h-4 w-4" />
