@@ -13,6 +13,7 @@ import PurchasePage from "./pages/PurchasePage";
 import SalesPage from "./pages/SalesPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import RolesPage from "./pages/RolesPage";
+import AdminPanel from "./pages/AdminPanel";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 
@@ -60,6 +61,11 @@ const App = () => (
             <Route path="/roles" element={
               <ProtectedRoute>
                 <RolesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute>
+                <AdminPanel />
               </ProtectedRoute>
             } />
             <Route path="*" element={<NotFound />} />

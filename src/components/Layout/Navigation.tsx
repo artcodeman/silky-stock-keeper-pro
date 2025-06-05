@@ -9,7 +9,8 @@ import {
   BarChart3,
   Home,
   LogOut,
-  UserCog
+  UserCog,
+  settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -45,9 +46,14 @@ const Navigation = () => {
     { path: '/suppliers', label: '供应商', icon: Users },
   ];
 
-  // 只有管理员才能看到角色管理
-  if (userRole === 'admin') {
+  // 管理者和管理员可以看到角色管理
+  if (userRole === 'admin' || userRole === 'manager') {
     navItems.push({ path: '/roles', label: '角色管理', icon: UserCog });
+  }
+
+  // 只有管理者可以看到管理面板
+  if (userRole === 'manager') {
+    navItems.push({ path: '/admin', label: '管理面板', icon: settings });
   }
 
   const handleSignOut = async () => {
@@ -55,6 +61,19 @@ const Navigation = () => {
       await signOut();
     } catch (error) {
       console.error('退出失败:', error);
+    }
+  };
+
+  const getRoleText = (role: string | null) => {
+    switch (role) {
+      case 'admin':
+        return '管理员';
+      case 'manager':
+        return '管理者';
+      case 'purchaser':
+        return '采购员';
+      default:
+        return '未分配';
     }
   };
 
@@ -90,7 +109,7 @@ const Navigation = () => {
                 </span>
                 {userRole && (
                   <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                    {userRole === 'admin' ? '管理员' : '采购员'}
+                    {getRoleText(userRole)}
                   </span>
                 )}
               </div>

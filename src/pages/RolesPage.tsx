@@ -14,7 +14,7 @@ import MainLayout from '@/components/Layout/MainLayout';
 interface UserRole {
   id: string;
   user_id: string;
-  role: 'admin' | 'purchaser';
+  role: 'admin' | 'purchaser' | 'manager';
   created_at: string;
   profiles: {
     full_name: string | null;
@@ -26,7 +26,7 @@ const RolesPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [selectedRole, setSelectedRole] = useState<'admin' | 'purchaser'>('purchaser');
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'purchaser' | 'manager'>('purchaser');
 
   // 获取所有用户角色
   const { data: userRoles, isLoading } = useQuery({
@@ -39,7 +39,7 @@ const RolesPage = () => {
           user_id,
           role,
           created_at,
-          profiles!inner (
+          profiles (
             full_name,
             email
           )
@@ -70,7 +70,7 @@ const RolesPage = () => {
 
   // 添加角色
   const addRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: 'admin' | 'purchaser' }) => {
+    mutationFn: async ({ userId, role }: { userId: string; role: 'admin' | 'purchaser' | 'manager' }) => {
       const { error } = await supabase
         .from('user_roles')
         .insert([{ user_id: userId, role }]);
@@ -139,11 +139,25 @@ const RolesPage = () => {
   };
 
   const getRoleBadgeVariant = (role: string) => {
-    return role === 'admin' ? 'default' : 'secondary';
+    switch (role) {
+      case 'admin':
+        return 'destructive' as const;
+      case 'manager':
+        return 'default' as const;
+      default:
+        return 'secondary' as const;
+    }
   };
 
   const getRoleText = (role: string) => {
-    return role === 'admin' ? '管理员' : '采购员';
+    switch (role) {
+      case 'admin':
+        return '管理员';
+      case 'manager':
+        return '管理者';
+      default:
+        return '采购员';
+    }
   };
 
   if (isLoading) {
@@ -189,12 +203,13 @@ const RolesPage = () => {
               </div>
               <div className="flex-1">
                 <label className="text-sm font-medium">选择角色</label>
-                <Select value={selectedRole} onValueChange={(value: 'admin' | 'purchaser') => setSelectedRole(value)}>
+                <Select value={selectedRole} onValueChange={(value: 'admin' | 'purchaser' | 'manager') => setSelectedRole(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">管理员</SelectItem>
+                    <SelectItem value="manager">管理者</SelectItem>
                     <SelectItem value="purchaser">采购员</SelectItem>
                   </SelectContent>
                 </Select>
